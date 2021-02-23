@@ -1,0 +1,322 @@
+---
+title: "CovidSurg"
+output:
+  flexdashboard::flex_dashboard:
+    theme: cosmo
+    #orientation: row
+    #source_code: embed
+runtime: shiny
+---
+
+<style>
+.colored {
+  background-color: #F1D64D;
+}
+</style>
+
+```{r global, include=FALSE}
+
+set.seed(132)
+old <- Sys.time() # get start time
+
+library(flexdashboard)
+#library(tidymodels)
+#library(tidyr)
+#library(vip)
+library(tidyverse)
+#library(tictoc)
+#library(furrr)
+#library(gridExtra)
+#library(grid)
+library(ggsci)
+library(knitr)
+#library(patchwork)
+#library(shiny)
+library(DT)
+
+
+#########
+#library(devtools)
+#install_github("jokergoo/ComplexHeatmap")
+#library(circlize)
+#library(ggplot2)
+#library(RColorBrewer)
+library(reshape)
+#library(Hmisc)
+#library(rms)
+#library(CORElearn)
+
+##########
+
+library(dummies)
+
+
+```
+
+```{r}
+
+
+EqsFun <- function(xx,data , m) {
+  
+#xx <- xx[1,]
+
+xx <- xx %>%
+  select((order(colnames(.))))
+
+xx2 <- xx %>%
+  pivot_longer(everything()) %>%
+  unite("All", name:value, sep="") 
+
+m2 <- filter(m, Names %in% c("(Intercept)", xx2$All))
+
+dummy <- list()
+for (i in 1:dim(xx)[2]) {
+  dummy[[i]] <- dummy(xx[[i]])
+}
+
+ff <- as.matrix(data.frame(dummy))
+linpred <- cbind(Intercept = 1, ff) %*% m2$Other
+
+pi <- exp(linpred) / (1 + exp(linpred))
+h <- data %>%
+  add_column(
+    G = pi,
+    G1 = linpred
+  ) %>%
+  mutate(
+    MortalityPlot = case_when(G <= 0.05 ~ "2%",
+                     G > 0.05 & G <= 0.2 ~ "12.7%", 
+                     G > 0.2 & G <= 0.5 ~ "30.2%", 
+                     G > 0.5 & G <= 0.8 ~ "47.3%", 
+                     )
+  ) %>% 
+  mutate(
+    Colour = case_when(G <= 0.05 ~ "#8FB89D",
+                     G > 0.05 & G <= 0.2 ~ "#F1D64D", 
+                     G > 0.2 & G <= 0.5 ~ "#E8B49A", 
+                     G > 0.5 & G <= 0.8 ~ "#C57472", 
+                     )
+  )
+  
+
+#scale_fill_manual(values= c(  "#8FB89D", "#F1D64D", "#E8B49A", "#C57472", "#C94135")) + #"#C94135",
+  
+  return(h)
+}
+
+
+FinalPlot <- readRDS("FinalPlot.RDS")
+m <- readRDS("m.RDS")
+vars <- readRDS("vars.RDS")
+
+```
+
+# Disclaimer { data-orientation=columns}
+
+### <b><font size="10em" color="#000000">__Welcome to the CovidSurg Risk calculator__</font></b>  
+
+<b><font size="5em"> __Warning__ </font></b>  
+
+<font size="5"> PLEASE NOTE: This risk calculator tool is __NOT__ intended for use to support or direct clinical decision-making. It is __ONLY__ to be used for academic research, peer review and validation purposes. This tool must __NOT__ be used with data or information relating to any individual patient or individual undergoing active medical treatment.</font>
+
+<b><font size="5"> For full terms and conditions, please contact legalservices@contacts.bham.ac.uk at the University of Birmingham.</font></b>
+
+<font size="5"> CovidSurg Risk is a data driven model based on and validated from real-world prospective patient data. This tool uses patient and clinical factors that are highly associated with mortality to predict the risk of death for patients undergoing surgery with COVID-19. </font>
+
+<font size="5"> A machine learning technique was used to generate the CovidSurg Risk calculator and has the potential to better inform surgeons, patients and healthcare decision makers to reach a better understanding of risk when treating surgical patients during the COVID-19 pandemic. </font>
+
+<font size="5"> This is an academic research calculator and the University of Birmingham accept no responsibility for clinical use or misuse of this tool </font>
+
+ 
+
+# Model { data-orientation=columns  data-icon="fa-project-diagram"}
+
+Row {.sidebar  data-width=500}
+-----------------------------------------------------------------------
+Please maximise the screen for optimal visualization.
+
+```{r}
+
+h3("To predict ")
+
+#style = "background-color: #EFF811",
+
+fillCol(height = 180, width= 480, flex = c(NA, 1), 
+          inputPanel(
+            selectInput("RespPreop", "Preop. Respiratory Support: ", choices = vars[[4]]), 
+            selectInput("age", "Age: ", choices = vars[[1]]), 
+            selectInput("asa3", "*ASA grade: ", choices = vars[[2]]), 
+            selectInput("cardiacrisk", "**Revised Cardiac Risk Index: ", choices = vars[[3]])
+          ), style = "background-color: blue;"
+)
+
+
+#h3("Selected variables ")
+
+ newdat  <- reactive({
+    tribble(~RespPreop,  ~age, ~asa3, ~cardiacrisk,
+                     input$RespPreop, input$age, input$asa3, input$cardiacrisk)
+  })
+ 
+```
+
+<font size="2em"> 
+
+*ASA Grade: 
+
+1.	Healthy person
+2.	Mild systemic disease
+3.	Severe systemic disease
+4.	Severe systemic disease that is a constant threat to life
+5.  A moribund person who is not expected to survive without the operation.
+
+**Revised Cardiac Risk Index - Total sum of the following risk factors:
+
+* History of ischemic heart disease (+1)
+* History of congestive heart failure (+1)
+* History of cerebrovascular disease (stroke or transient ischemic attack) (+1)
+* History of diabetes requiring preoperative insulin use (+1)
+* Chronic kidney disease [creatinine > 2 mg/dL (176.8 μmol/L)] (+1)
+* Undergoing suprainguinal vascular, intraperitoneal, or intrathoracic surgery (+1)
+
+</font>
+
+***
+
+
+```{r}
+h3("About us")
+```
+
+COVIDSurg Collaborative is led by the NIHR Global Surgery Research Unit. This machine learning risk stratification tool has been developed with the Health Data Research UK (HDRUK) team at the Institute of Translational Medicine, hosted within the University of Birmingham. The risk calculator is based upon data from patients infected with SARS-CoV-2 within the 7-days before to 30-days after surgery (perioperative infection). Patients underwent surgery of all types and for any indication during the COVID-19 pandemic (February 2020 to July 2020). The link to the study protocol is available at: [CovidSurg](https://globalsurg.org/covidsurg/).  A machine learning technique was used to generate the CovidSurg Risk calculator and has the potential to inform surgeons, patients, and healthcare decision makers to reach a better understanding of risk when treating surgical patients during the COVID-19 pandemic
+
+__Model Development Team__ (alphabetical by surname):
+
+* Laura Bravo
+* Victor Roth Cardoso
+* James Glasbey
+* Georgios Gkoutos
+* Elizabeth Li
+* Dmitri Nepogodiev
+* Omar Omar
+* Joana Simoes
+* Luke Slater
+* Aneel Bhangu (guarantor)
+
+A full list of COVIDSurg collaborators will be presented in the final published paper.
+
+### Row 
+-----------------------------------------------------------------------
+
+```{r }
+ 
+Fin  <- reactive({
+    
+    Fin <- EqsFun(newdat(), newdat(), m)
+     Fin
+
+  })
+
+``` 
+
+
+### Model probability output
+
+```{r}
+#renderGauge({gauge(format(round(Fin()$G, 2), nsmall = 2), min = 0, max = 0.8, 
+#                   sectors = gaugeSectors(success = c(0, 0.05), color = c("#8FB89D"), 
+#                                 warning = c(0.05, 0.5),
+#                                 danger = c(0.5, 0.8)
+#          ) )})
+#
+
+
+  renderValueBox({
+  valueBox(
+    value = paste0("Model probability output: ",round(Fin()$G, 2)),
+    caption = paste0("Case-fatality/Mortality percentage: ",Fin()$MortalityPlot),
+    icon = "fa-calculator",
+    color = paste0(Fin()$Colour)
+  )
+  
+})
+
+
+
+
+```
+
+### Calculator
+
+```{r}
+
+#h3(" ")
+
+renderPlot({
+    
+
+FinalPlot <- FinalPlot %>% 
+#mutate(asa3 = factor(asa3, levels = c("asa3Grade 4-5", "asa3Grade 3", "asa3Grades 1"))) #%>%
+mutate(text = case_when(age == Fin()$age & asa3 == Fin()$asa3 & RespPreop == Fin()$RespPreop & cardiacrisk == Fin()$cardiacrisk ~ "x",
+  TRUE ~ " "))
+
+
+
+print(ggplot(FinalPlot, aes(x = FinalPlot[[1]], y = FinalPlot[[2]], fill = Risk)) +
+  geom_tile(color = "black", size = 0.5) +
+   geom_text(aes(label=text), size=8) +
+  scale_fill_brewer(palette = "Set3") +
+  # scale_x_discrete(position = "top") +
+  scale_x_discrete("Age") +
+  scale_y_discrete("Asa Grade") +
+  #scale_fill_discrete(name = "Risk", labels = c("[0,0.2]", "(0.2,0.4]", "(0.4,0.6]", "(0.6,0.8]")) +
+  scale_fill_manual(values= c(  "#8FB89D", "#F1D64D", "#E8B49A", "#C57472", "#C94135")) + #"#C94135",
+  # values= c( "#b7aeae", "#c3a4a2", "#cf9a96", "#db908a" ,"#e6857f" , "#C57472", "#fe7167")) +
+  theme(
+    axis.text.x = element_text(angle = 90, hjust = 1), panel.background = element_blank(), panel.border = element_blank(), panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(), plot.background = element_blank(),
+    axis.text = element_text(size = 15),
+    legend.text=element_text(size=14),
+    legend.title=element_text(size=15, face = "bold"),
+    axis.title = element_text(size = 13, face = "bold"),
+    strip.text.x = element_text(size = 13), 
+    strip.text.y = element_text(size = 13) 
+  ) +
+  facet_grid(cardiacrisk ~ RespPreop, scales = "free", labeller = label_both ) +
+  labs(fill = "Probability Threshold and Mortality") + 
+    theme(legend.position="bottom")
+) + 
+  guides(fill = guide_legend(title.position="top", title.hjust = 0.5, ))
+
+ }, width = 1150, height = 750)
+  
+h3(" ")
+
+
+```
+
+Figure information: The mortality risk groups (expressed as %) give the risk of death based on the factors you have selected. The probability threshold (ranging from 0 to 0.8) refers to the probability of a patient dying, compared to all the patients who died.
+
+***
+
+```{r}
+
+#h3("Performance metric in Validation Cohort")
+
+MT1 <- read_csv("Tab3_MortalityTableDerv copy.csv") %>% 
+  select(-X1) 
+ 
+MT2 <- read_csv("Tab3_MortalityTableVal copy.csv") %>% 
+  select(-X1) 
+
+MT2[-c(3,4),] %>%
+  kable(.,digits = 2, row.names = NA, format.args = list(scientific = FALSE), caption = "Validation Set")
+
+
+MT1[-c(3,4),] %>% 
+  kable(.,digits = 2, row.names = NA, format.args = list(scientific = FALSE), caption = "Derivation Set")
+
+
+
+```
+
